@@ -75,6 +75,6 @@ function formatDate(date = new Date()) {
 }
 
 
-addRelease({ version, formatDate(), notes });
+addRelease({ version, date:formatDate(), notes });
 
 console.log(`✅ Added release ${version} to CHANGELOG.md`);
