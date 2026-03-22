@@ -137,7 +137,10 @@ jobs:
         if: steps.versioning.outputs.changed == 'true'
         run: |
           NEW_TAG="$(node -p "require('./package.json').version")"
-          node updateChangelog.js "$NEW_TAG" ${{ env.ADDED_VARS }} ${{ env.REMOVED_VARS }}
+          ADDED="${{ env.ADDED_VARS }}"
+          REMOVED="${{ env.REMOVED_VARS }}"
+      
+          node updateChangelog.js "$NEW_TAG" "$ADDED" "$REMOVED"
       
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
