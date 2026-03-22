@@ -55,7 +55,16 @@ if (args.length < 1) {
 }
 
 const version = args[0];
-const notes = args[1] || '- Minor changes';
+
+
+const NOTES_TEMPLATE = `### Added
+${args[1]}
+  
+### Removed
+${args[2]}
+`
+  
+const notes = NOTES_TEMPLATE;
 const date = new Date().toISOString().split('T')[0]; // e.g., 2026-03-22
 
 addRelease({ version, date, notes });
