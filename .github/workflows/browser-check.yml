@@ -36,27 +36,33 @@ jobs:
       - name: Execute Script and Compare
         id: compare_globals
         run: |
-          # Store the old globals if the file exists
+          # 1. Store the old globals if the file exists
           if [ -f browser_globals.json ]; then
             cp browser_globals.json old_globals.json
           else
             echo "[]" > old_globals.json
           fi
 
-          # Run your script to generate the new browser_globals.json
+          # 2. Run your script to generate the new browser_globals.json
           npm run check-globals
 
-          # Use Node to find the difference (new additions only)
-          NEW_VARS=$(node -e "
-            const oldG = require('./old_globals.json');
-            const newG = require('./browser_globals.json');
-            const diff = newG.filter(x => !oldG.includes(x));
-            console.log(diff.join(', ') || 'None');
-          ")
-          
-          # Store the result in the workflow environment
-          echo "NEW_GLOBALS=$NEW_VARS" >> $GITHUB_ENV
-          echo "diff=$NEW_VARS" >> $GITHUB_OUTPUT
+          # 3. Use Node to calculate added and removed variables
+          node -e "
+            const fs = require('fs');
+            const oldG = JSON.parse(fs.readFileSync('./old_globals.json', 'utf8'));
+            const newG = JSON.parse(fs.readFileSync('./browser_globals.json', 'utf8'));
+            
+            const added = newG.filter(x => !oldG.includes(x));
+            const removed = oldG.filter(x => !newG.includes(x));
+            
+            // Format as bulleted lists
+            const addedList = added.length > 0 ? added.map(x => '* ' + x).join('\n') : '* None';
+            const removedList = removed.length > 0 ? removed.map(x => '* ' + x).join('\n') : '* None';
+            
+            // Use multiline environment variables for GitHub Actions
+            fs.appendFileSync(process.env.GITHUB_ENV, 'ADDED_VARS<<EOF\n' + addedList + '\nEOF\n');
+            fs.appendFileSync(process.env.GITHUB_ENV, 'REMOVED_VARS<<EOF\n' + removedList + '\nEOF\n');
+          "
 
       - name: Bump Version and Commit
         id: versioning
@@ -79,11 +85,16 @@ jobs:
           tag_name: ${{ steps.versioning.outputs.tag }}
           name: Release ${{ steps.versioning.outputs.tag }}
           body: |
-            ## Automated update of browser globals
-            **Type:** ${{ github.event.inputs.version_type }}
-            **Version:** ${{ steps.versioning.outputs.tag }}
+            ## Browser Globals Update Report
             
-            ### 🆕 New Variables Added:
-            ${{ env.NEW_GLOBALS }}
+            **Update Type:** ${{ github.event.inputs.version_type }}
+            **Release Version:** ${{ steps.versioning.outputs.tag }}
+            
+            ---
+            ### 🟢 New Additions
+            ${{ env.ADDED_VARS }}
+            
+            ### 🔴 Removed Variables
+            ${{ env.REMOVED_VARS }}
           files: |
             browser_globals.json
