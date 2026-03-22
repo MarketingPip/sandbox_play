@@ -20,4 +20,4 @@ jobs:
         run: npm install
 
       - name: Execute Script
-        run: node run check-globals
+        run: npm run check-globals
