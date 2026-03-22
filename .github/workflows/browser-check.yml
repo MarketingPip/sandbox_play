@@ -34,19 +34,16 @@ jobs:
         run: npm install
 
       - name: Execute Script and Compare
-        id: compare_globals
+        id: versioning
         run: |
-          # 1. Store the old globals if the file exists
           if [ -f browser_globals.json ]; then
             cp browser_globals.json old_globals.json
           else
             echo "[]" > old_globals.json
           fi
 
-          # 2. Run your script to generate the new browser_globals.json
           npm run check-globals
 
-          # 3. Use Node to calculate added and removed variables
           node -e "
             const fs = require('fs');
             const oldG = JSON.parse(fs.readFileSync('./old_globals.json', 'utf8'));
@@ -54,30 +51,27 @@ jobs:
             
             const added = newG.filter(x => !oldG.includes(x));
             const removed = oldG.filter(x => !newG.includes(x));
-            
-            // Format as bulleted lists
-            const addedList = added.length > 0 ? added.map(x => '* ' + x).join('\n') : '* None';
-            const removedList = removed.length > 0 ? removed.map(x => '* ' + x).join('\n') : '* None';
-            
-            // Use multiline environment variables for GitHub Actions
-            fs.appendFileSync(process.env.GITHUB_ENV, 'ADDED_VARS<<EOF\n' + addedList + '\nEOF\n');
-            fs.appendFileSync(process.env.GITHUB_ENV, 'REMOVED_VARS<<EOF\n' + removedList + '\nEOF\n');
-          "
 
-      - name: Bump Version and Commit
-        id: versioning
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          
-          git add browser_globals.json
-          
-          npm version ${{ github.event.inputs.version_type }} --force -m "Bump to %s [skip ci]"
-          
-          NEW_TAG="v$(node -p "require('./package.json').version")"
-          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
-          
-          git push && git push --tags
+            function formatList(list, label) {
+              if (list.length === 0) return '';
+              
+              const fullList = list.map(x => '* ' + x).join('\n');
+              
+              if (list.length <= 10) {
+                return fullList;
+              } else {
+                const preview = list.slice(0, 10).map(x => '* ' + x).join('\n');
+                const remaining = list.length - 10;
+                return preview + '\n\n<details>\n<summary>...and ' + remaining + ' more (Click to view full list)</summary>\n\n' + fullList + '\n</details>';
+              }
+            }
+
+            const addedOutput = formatList(added);
+            const removedOutput = formatList(removed);
+            
+            fs.appendFileSync(process.env.GITHUB_ENV, 'ADDED_VARS<<EOF\n' + addedOutput + '\nEOF\n');
+            fs.appendFileSync(process.env.GITHUB_ENV, 'REMOVED_VARS<<EOF\n' + removedOutput + '\nEOF\n');
+          "
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -85,16 +79,13 @@ jobs:
           tag_name: ${{ steps.versioning.outputs.tag }}
           name: Release ${{ steps.versioning.outputs.tag }}
           body: |
-            ## Browser Globals Update Report
+            ## Browser Globals Update
             
-            **Update Type:** ${{ github.event.inputs.version_type }}
             **Release Version:** ${{ steps.versioning.outputs.tag }}
+            ${{ env.ADDED_VARS != '' && '### 🟢 New Additions' || '' }}
+            ${{ env.ADDED_VARS || '* No new additions' }}
             
-            ---
-            ### 🟢 New Additions
-            ${{ env.ADDED_VARS }}
-            
-            ### 🔴 Removed Variables
+            ${{ env.REMOVED_VARS != '' && '### 🔴 Removed Variables' || '' }}
             ${{ env.REMOVED_VARS }}
           files: |
             browser_globals.json
