@@ -62,7 +62,7 @@ jobs:
               } else {
                 const preview = list.slice(0, 10).map(x => '* ' + x).join('\n');
                 const remaining = list.length - 10;
-                return preview + '... and ${remaining} more\n\n<details>\n<summary>' + '(Click to view full list)</summary>\n\n' + fullList + '\n</details>';
+                return preview + '\n   ... and ${remaining} more\n\n<details>\n<summary>' + '(Click to view full list)</summary>\n\n' + fullList + '\n</details>';
               }
             }
 
