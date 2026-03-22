@@ -66,9 +66,15 @@ ${args[1]}
 ${removedSection}
 `
   
-const notes = NOTES_TEMPLATE;
-const date = new Date().toISOString().split('T')[0]; // e.g., 2026-03-22
+function formatDate(date = new Date()) {
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+}
 
-addRelease({ version, date, notes });
+
+addRelease({ version, formatDate(), notes });
 
 console.log(`✅ Added release ${version} to CHANGELOG.md`);
