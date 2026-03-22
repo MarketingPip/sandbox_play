@@ -1,7 +1,7 @@
 name: Browser Global Check
 
 on:
-  workflow_dispatch: # Allows you to run this manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   run-browser-code:
@@ -15,8 +15,12 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
+      - name: Install Playwright
         run: npm install playwright
+
+      - name: Install Browser Binaries
+        # This fixes the "Executable doesn't exist" error
+        run: npx playwright install chromium --with-deps
 
       - name: Execute Script
         run: node get_globals.js
