@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for npm version to see history
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -24,24 +26,33 @@ jobs:
       - name: Execute Script
         run: npm run check-globals
 
-      - name: Commit and Push Globals
+      - name: Bump Version and Commit
+        id: versioning
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-
-          # Check if the file already exists in the repo
-          if git ls-files --error-unmatch browser_globals.json > /dev/null 2>&1; then
-            MSG="Updated Browser Globals"
-          else
-            MSG="Added Browser Globals"
-          fi
-
+          
+          # 1. Stage the globals file
           git add browser_globals.json
+          
+          # 2. Bump version (this updates package.json, commits, and tags)
+          # 'patch' turns 1.0.0 into 1.0.1
+          npm version patch -m "Bump to %s [skip ci]"
+          
+          # 3. Get the new version string for the release step
+          NEW_TAG=$(node -p "require('./package.json').version")
+          echo "tag=v$NEW_TAG" >> $GITHUB_OUTPUT
+          
+          # 4. Push the commit and the new tag
+          git push && git push --tags
 
-          # Only commit if there are changes (avoids workflow error if nothing changed)
-          if git diff --staged --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "$MSG"
-            git push
-          fi
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.versioning.outputs.tag }}
+          name: Release ${{ steps.versioning.outputs.tag }}
+          body: |
+            Automated update of browser globals.
+            Version: ${{ steps.versioning.outputs.tag }}
+          files: |
+            browser_globals.json
