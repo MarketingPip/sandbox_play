@@ -6,6 +6,9 @@ on:
 jobs:
   run-browser-code:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -14,10 +17,31 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          #cache: 'npm' # Speeds up subsequent runs
 
-      - name: Install Dependecies
+      - name: Install Dependencies
         run: npm install
 
       - name: Execute Script
         run: npm run check-globals
+
+      - name: Commit and Push Globals
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Check if the file already exists in the repo
+          if git ls-files --error-unmatch browser_globals.json > /dev/null 2>&1; then
+            MSG="Updated Browser Globals"
+          else
+            MSG="Added Browser Globals"
+          fi
+
+          git add browser_globals.json
+
+          # Only commit if there are changes (avoids workflow error if nothing changed)
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "$MSG"
+            git push
+          fi
