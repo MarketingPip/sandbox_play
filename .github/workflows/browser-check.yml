@@ -131,3 +131,33 @@ jobs:
             ${{ env.REMOVED_VARS }}
           files: |
             browser_globals.json
+
+
+      - name: Update Changelog
+        if: steps.versioning.outputs.changed == 'true'
+        run: |
+          NEW_TAG="v$(node -p "require('./package.json').version")"
+          node updateChangelog.js NEW_TAG
+      
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+      
+          git add CHANGELOG.md
+      
+          # Determine commit message
+          if git ls-files --error-unmatch browser_globals.json > /dev/null 2>&1; then
+            MSG="Updated Browser Globals"
+          else
+            MSG="Added Browser Globals"
+          fi
+      
+          git commit -m "$MSG"
+      
+          # Perform version bump
+          npm version ${{ github.event.inputs.version_type }} --force -m "Bump to %s [skip ci]"
+      
+          NEW_TAG="v$(node -p "require('./package.json').version")"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+      
+          git push
+          git push --tags
