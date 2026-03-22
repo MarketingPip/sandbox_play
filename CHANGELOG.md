@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.14] - (2026-03-22)
+
+### Added
+* AbortSignal
+  
+
+
+
 ## [1.0.13] - (2026-03-22)
 
 ### Added
@@ -1018,3 +1026,4 @@ These Markdown anchors provide a link to the diff for each release.
 [v1.0.10]: /vv1.0.10
 [1.0.11]: /v1.0.11
 [1.0.13]: /v1.0.13
+[1.0.14]: /v1.0.14
