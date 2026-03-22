@@ -56,12 +56,14 @@ if (args.length < 1) {
 
 const version = args[0];
 
+const removedSection = args[2] && args[2].trim() !== '' 
+  ? `### Removed\n${args[2]}` 
+  : '';
 
 const NOTES_TEMPLATE = `### Added
 ${args[1]}
   
-### Removed
-${args[2]}
+${removedSection}
 `
   
 const notes = NOTES_TEMPLATE;
