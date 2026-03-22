@@ -14,13 +14,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm' # Speeds up subsequent runs
 
-      - name: Install Playwright
-        run: npm install playwright
-
-      - name: Install Browser Binaries
-        # This fixes the "Executable doesn't exist" error
-        run: npx playwright install chromium --with-deps
+      - name: Install Dependecies
+        run: npm install
 
       - name: Execute Script
-        run: node get_globals.js
+        run: node run get_globals.js
