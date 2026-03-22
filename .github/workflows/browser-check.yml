@@ -2,6 +2,16 @@ name: Browser Global Check
 
 on:
   workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Type of version bump'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 jobs:
   run-browser-code:
@@ -13,7 +23,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required for npm version to see history
+          fetch-depth: 0 
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -32,18 +42,14 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 1. Stage the globals file
           git add browser_globals.json
           
-          # 2. Bump version (this updates package.json, commits, and tags)
-          # 'patch' turns 1.0.0 into 1.0.1
-          npm version patch -m "Bump to %s [skip ci]"
+          # Use the input from the dropdown menu (patch, minor, or major)
+          npm version ${{ github.event.inputs.version_type }} -m "Bump to %s [skip ci]"
           
-          # 3. Get the new version string for the release step
-          NEW_TAG=$(node -p "require('./package.json').version")
-          echo "tag=v$NEW_TAG" >> $GITHUB_OUTPUT
+          NEW_TAG="v$(node -p "require('./package.json').version")"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
           
-          # 4. Push the commit and the new tag
           git push && git push --tags
 
       - name: Create GitHub Release
@@ -53,6 +59,7 @@ jobs:
           name: Release ${{ steps.versioning.outputs.tag }}
           body: |
             Automated update of browser globals.
+            Type: ${{ github.event.inputs.version_type }}
             Version: ${{ steps.versioning.outputs.tag }}
           files: |
             browser_globals.json
