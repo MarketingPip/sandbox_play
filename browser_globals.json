@@ -1,6 +1,5 @@
 [
   "AbortController",
-  "AbortSignal",
   "AbstractRange",
   "AggregateError",
   "AnalyserNode",
