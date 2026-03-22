@@ -14,16 +14,17 @@ on:
           - major
 
 jobs:
-  run-browser-code:
+  check-globals:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
+    outputs:
+      changed: ${{ steps.compare.outputs.changed }}
+      added_vars: ${{ steps.compare.outputs.added_vars }}
+      removed_vars: ${{ steps.compare.outputs.removed_vars }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,7 +35,7 @@ jobs:
         run: npm install
 
       - name: Execute Script and Compare
-        id: compare_globals
+        id: compare
         run: |
           if [ -f browser_globals.json ]; then
             cp browser_globals.json old_globals.json
@@ -42,7 +43,7 @@ jobs:
             echo "[]" > old_globals.json
           fi
 
-          npm run check-globals
+          npm run check-globals || exit 1
 
           node -e "
             const fs = require('fs');
@@ -52,63 +53,96 @@ jobs:
             const added = newG.filter(x => !oldG.includes(x));
             const removed = oldG.filter(x => !newG.includes(x));
 
-            function formatList(list, label) {
-              if (list.length === 0) return '';
-              
+            function formatList(list) {
+              if (!list.length) return '';
               const fullList = list.map(x => '* ' + x).join('\n');
-              
-              if (list.length <= 10) {
-                return fullList;
-              } else {
-                const preview = list.slice(0, 10).map(x => '* ' + x).join('\n');
-                const remaining = list.length - 10;
-                return preview + '\n\n   ... and ${remaining} more\n\n<details>\n<summary>' + '(Click to view full list)</summary>\n\n' + fullList + '\n</details>';
-              }
+              if (list.length <= 10) return fullList;
+              const preview = list.slice(0, 10).map(x => '* ' + x).join('\n');
+              return preview + '\n\n   ... and ' + (list.length-10) + ' more\n\n<details><summary>(Click to view full list)</summary>\n\n' + fullList + '\n</details>';
             }
 
             const addedOutput = formatList(added);
             const removedOutput = formatList(removed);
-            
-            fs.appendFileSync(process.env.GITHUB_ENV, 'ADDED_VARS<<EOF\n' + addedOutput + '\nEOF\n');
-            fs.appendFileSync(process.env.GITHUB_ENV, 'REMOVED_VARS<<EOF\n' + removedOutput + '\nEOF\n');
+
+            fs.writeFileSync('./added_vars.txt', addedOutput);
+            fs.writeFileSync('./removed_vars.txt', removedOutput);
+
+            console.log('::set-output name=added_vars::' + addedOutput);
+            console.log('::set-output name=removed_vars::' + removedOutput);
+            console.log('::set-output name=changed::' + (added.length + removed.length > 0));
           "
 
+  generate-changelog:
+    needs: check-globals
+    runs-on: ubuntu-latest
+    if: needs.check-globals.outputs.changed == 'true'
+    outputs:
+      success: ${{ steps.changelog.outputs.success }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Bump Version and Commit
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate Changelog (locally)
+        id: changelog
+        run: |
+          NEW_TAG="TEMP"  # Placeholder; actual tag will be set after version bump
+          ADDED="${{ needs.check-globals.outputs.added_vars }}"
+          REMOVED="${{ needs.check-globals.outputs.removed_vars }}"
+
+          node updateChangelog.js "$NEW_TAG" "$ADDED" "$REMOVED" || exit 1
+
+          echo "success=true" >> $GITHUB_OUTPUT
+
+  version-bump-and-release:
+    needs: generate-changelog
+    runs-on: ubuntu-latest
+    if: needs.generate-changelog.outputs.success == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Commit Browser Globals and Changelog, Bump Version
         id: versioning
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          git add browser_globals.json
+          git add browser_globals.json CHANGELOG.md
 
-          # Check if there are actual staged changes
+          # Determine if there are changes
           if git diff --staged --quiet; then
-            echo "No changes detected in browser_globals.json. Exiting."
+            echo "No changes to commit."
             echo "changed=false" >> $GITHUB_OUTPUT
-            # Optionally stop the job right here
             exit 0
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-            
-            # Determine message
-            if git ls-files --error-unmatch browser_globals.json > /dev/null 2>&1; then
-              MSG="Updated Browser Globals"
-            else
-              MSG="Added Browser Globals"
-            fi
-
-            git commit -m "$MSG"
-            
-            # Perform version bump
-            npm version ${{ github.event.inputs.version_type }} --force -m "Bump to %s [skip ci]"
-            
-            NEW_TAG="v$(node -p "require('./package.json').version")"
-            echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
-            
-            git push && git push --tags
           fi
 
+          # Commit both files together
+          git commit -m "Update Browser Globals and Changelog"
+
+          # Bump version now
+          npm version ${{ github.event.inputs.version_type }} --force -m "Bump to %s [skip ci]"
+
+          NEW_TAG="v$(node -p "require('./package.json').version")"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+          git push && git push --tags
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -118,39 +152,13 @@ jobs:
           name: Release ${{ steps.versioning.outputs.tag }}
           body: |
             ## Browser Globals Update Report
-            
             **Update Type:** ${{ github.event.inputs.version_type }}
             **Release Version:** ${{ steps.versioning.outputs.tag }}
-            
-            ---
-            
-            ${{ env.ADDED_VARS != '' && '### 🟢 New Additions' || '' }}
-            ${{ env.ADDED_VARS || '* No new additions' }}
-            
-            ${{ env.REMOVED_VARS != '' && '### 🔴 Removed Variables' || '' }}
-            ${{ env.REMOVED_VARS }}
+
+            ${{ needs.check-globals.outputs.added_vars != '' && '### 🟢 New Additions' || '' }}
+            ${{ needs.check-globals.outputs.added_vars || '* No new additions' }}
+
+            ${{ needs.check-globals.outputs.removed_vars != '' && '### 🔴 Removed Variables' || '' }}
+            ${{ needs.check-globals.outputs.removed_vars }}
           files: |
             browser_globals.json
-
-
-      - name: Update Changelog
-        if: steps.versioning.outputs.changed == 'true'
-        run: |
-          NEW_TAG="$(node -p "require('./package.json').version")"
-          ADDED="${{ env.ADDED_VARS }}"
-          REMOVED="${{ env.REMOVED_VARS }}"
-      
-          node updateChangelog.js "$NEW_TAG" "$ADDED" "$REMOVED"
-      
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-      
-          git add CHANGELOG.md
-      
-          # Only commit if there are changes
-          if ! git diff --cached --quiet; then
-            git commit -m "Update Browser Globals for $NEW_TAG"
-            git push
-          else
-            echo "No changes to commit"
-          fi
