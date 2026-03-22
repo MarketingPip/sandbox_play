@@ -1,6 +1,6 @@
 {
   "name": "browser-check",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "type": "module",
   "scripts": {
     "check-globals": "npx playwright install chromium --with-deps && node get_globals.js"
