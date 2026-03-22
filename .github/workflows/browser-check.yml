@@ -34,7 +34,7 @@ jobs:
         run: npm install
 
       - name: Execute Script and Compare
-        id: versioning
+        id: compare_globals
         run: |
           if [ -f browser_globals.json ]; then
             cp browser_globals.json old_globals.json
@@ -73,15 +73,34 @@ jobs:
             fs.appendFileSync(process.env.GITHUB_ENV, 'REMOVED_VARS<<EOF\n' + removedOutput + '\nEOF\n');
           "
 
+      - name: Bump Version and Commit
+        id: versioning
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add browser_globals.json
+          
+          npm version ${{ github.event.inputs.version_type }} --force -m "Bump to %s [skip ci]"
+          
+          NEW_TAG="v$(node -p "require('./package.json').version")"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          
+          git push && git push --tags
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.versioning.outputs.tag }}
           name: Release ${{ steps.versioning.outputs.tag }}
           body: |
-            ## Browser Globals Update
+            ## Browser Globals Update Report
             
+            **Update Type:** ${{ github.event.inputs.version_type }}
             **Release Version:** ${{ steps.versioning.outputs.tag }}
+            
+            ---
+            
             ${{ env.ADDED_VARS != '' && '### 🟢 New Additions' || '' }}
             ${{ env.ADDED_VARS || '* No new additions' }}
             
