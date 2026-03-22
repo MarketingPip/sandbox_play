@@ -33,8 +33,30 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Execute Script
-        run: npm run check-globals
+      - name: Execute Script and Compare
+        id: compare_globals
+        run: |
+          # Store the old globals if the file exists
+          if [ -f browser_globals.json ]; then
+            cp browser_globals.json old_globals.json
+          else
+            echo "[]" > old_globals.json
+          fi
+
+          # Run your script to generate the new browser_globals.json
+          npm run check-globals
+
+          # Use Node to find the difference (new additions only)
+          NEW_VARS=$(node -e "
+            const oldG = require('./old_globals.json');
+            const newG = require('./browser_globals.json');
+            const diff = newG.filter(x => !oldG.includes(x));
+            console.log(diff.join(', ') || 'None');
+          ")
+          
+          # Store the result in the workflow environment
+          echo "NEW_GLOBALS=$NEW_VARS" >> $GITHUB_ENV
+          echo "diff=$NEW_VARS" >> $GITHUB_OUTPUT
 
       - name: Bump Version and Commit
         id: versioning
@@ -44,7 +66,6 @@ jobs:
           
           git add browser_globals.json
           
-          # Use the input from the dropdown menu (patch, minor, or major)
           npm version ${{ github.event.inputs.version_type }} --force -m "Bump to %s [skip ci]"
           
           NEW_TAG="v$(node -p "require('./package.json').version")"
@@ -58,8 +79,11 @@ jobs:
           tag_name: ${{ steps.versioning.outputs.tag }}
           name: Release ${{ steps.versioning.outputs.tag }}
           body: |
-            Automated update of browser globals.
-            Type: ${{ github.event.inputs.version_type }}
-            Version: ${{ steps.versioning.outputs.tag }}
+            ## Automated update of browser globals
+            **Type:** ${{ github.event.inputs.version_type }}
+            **Version:** ${{ steps.versioning.outputs.tag }}
+            
+            ### 🆕 New Variables Added:
+            ${{ env.NEW_GLOBALS }}
           files: |
             browser_globals.json
