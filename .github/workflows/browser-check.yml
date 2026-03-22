@@ -45,7 +45,7 @@ jobs:
           git add browser_globals.json
           
           # Use the input from the dropdown menu (patch, minor, or major)
-          npm version ${{ github.event.inputs.version_type }} -m "Bump to %s [skip ci]"
+          npm version ${{ github.event.inputs.version_type }} --force -m "Bump to %s [skip ci]"
           
           NEW_TAG="v$(node -p "require('./package.json').version")"
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
