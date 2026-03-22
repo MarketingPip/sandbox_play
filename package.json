@@ -1,7 +1,6 @@
 {
   "scripts": {
-    "postinstall": "playwright install chromium --with-deps",
-    "check-globals": "node get_globals.js"
+    "check-globals": "npx playwright install chromium --with-deps && node get_globals.js"
   },
   "dependencies": {
     "playwright": "^1.42.0"
